@@ -1,14 +1,23 @@
-Dưới đây là **tài liệu tổng hợp business hoàn chỉnh** cho **Hệ thống Booking Spa** mà chúng ta đã trao đổi, được viết theo phong cách **Business Requirement / Domain Documentation** (có thể dùng cho BA, Dev, Architect, hoặc đưa vào README/Confluence).
+Dưới đây là **TÀI LIỆU BUSINESS HOÀN CHỈNH** cho **HỆ THỐNG BOOKING SPA** sau khi **chốt Phương án C**:
 
----
+> ✅ **Không có Auth Service**
+> ✅ **Không có Auth Database**
+> ✅ **Dùng Keycloak (OIDC) + API Gateway xác thực JWT**
 
-# 1️⃣ TÀI LIỆU BUSINESS (Markdown)
+Tài liệu này có thể dùng trực tiếp cho:
+
+* Business Analyst
+* Backend / Frontend
+* Architect
+* Làm README / Confluence / Design Doc
 
 ---
 
 # 📘 SPA BOOKING SYSTEM
 
-**Business Overview & Requirements Document**
+## Business Requirement & Domain Documentation
+
+### (Architecture: Microservices + Keycloak + API Gateway)
 
 ---
 
@@ -16,440 +25,561 @@ Dưới đây là **tài liệu tổng hợp business hoàn chỉnh** cho **Hệ
 
 Hệ thống Booking Spa được xây dựng nhằm:
 
-* Cho phép **khách hàng đặt lịch spa online** theo khung giờ trống.
-* Giảm thao tác thủ công cho spa (gọi điện, ghi sổ).
-* Quản lý **lịch làm việc nhân viên**, **slot trống**, **booking**, **thanh toán**, **thông báo**.
-* Hỗ trợ mở rộng quy mô (nhiều chi nhánh, nhiều nhân viên, nhiều dịch vụ).
-* Thiết kế theo **kiến trúc microservices**, dễ mở rộng, dễ bảo trì.
+* Cho phép **khách hàng đặt lịch spa online** theo khung giờ thực tế.
+* Tự động hoá:
+
+  * quản lý lịch nhân viên
+  * quản lý khung giờ trống
+  * xác nhận đặt lịch
+  * thanh toán
+  * thông báo
+* Đảm bảo:
+
+  * Không trùng lịch
+  * Không overbooking
+  * Trải nghiệm người dùng mượt mà
+* Áp dụng **kiến trúc microservices hiện đại**:
+
+  * Bảo mật tập trung
+  * Scale độc lập
+  * Dễ mở rộng
 
 ---
 
-## 2. Đối tượng sử dụng (Actors)
+## 2. Phạm vi hệ thống (System Scope)
 
-| Actor        | Mô tả                                 |
-| ------------ | ------------------------------------- |
-| **Customer** | Khách hàng đặt lịch spa               |
-| **Staff**    | Nhân viên spa thực hiện dịch vụ       |
-| **Admin**    | Quản trị hệ thống                     |
-| **System**   | Các service nội bộ giao tiếp với nhau |
+### Hệ thống **CÓ**
+
+* Booking online
+* Quản lý slot theo thời gian thực
+* Thanh toán
+* Thông báo Email/SMS
+* Phân quyền theo vai trò (Customer / Staff / Admin)
+
+### Hệ thống **KHÔNG**
+
+* Không tự quản lý password
+* Không lưu credential
+* Không login trực tiếp trong backend
+* Không join database giữa các service
 
 ---
 
-## 3. Tổng quan nghiệp vụ (Business Flow Overview)
+## 3. Actors (Đối tượng sử dụng)
 
-Luồng nghiệp vụ cốt lõi:
+| Actor        | Mô tả               |
+| ------------ | ------------------- |
+| **Customer** | Khách hàng đặt lịch |
+| **Staff**    | Nhân viên spa       |
+| **Admin**    | Quản trị hệ thống   |
+| **System**   | Các service nội bộ  |
+
+---
+
+## 4. Kiến trúc xác thực & phân quyền (Authentication & Authorization)
+
+### 4.1. Nguyên tắc cốt lõi
+
+| Thành phần            | Trách nhiệm                                        |
+| --------------------- | -------------------------------------------------- |
+| **Keycloak**          | Xác thực người dùng (login, logout, refresh token) |
+| **API Gateway**       | Xác minh JWT, phân quyền, routing                  |
+| **Business Services** | Tin cậy gateway, KHÔNG xử lý auth                  |
+
+---
+
+### 4.2. Nguồn sự thật về danh tính (Identity Source)
+
+* `userId` trong toàn hệ thống = **`sub` trong JWT**
+* Roles lấy từ:
+
+  * `realm_access.roles` (Keycloak)
+
+---
+
+## 5. Tổng quan nghiệp vụ (Business Overview)
 
 ```text
 Customer
+  ↓ Login
+Keycloak
+  ↓ JWT
+API Gateway
   ↓
-Xem dịch vụ spa
-  ↓
-Xem slot trống
-  ↓
-Đặt lịch (Booking)
-  ↓
-Thanh toán
-  ↓
-Xác nhận booking
-  ↓
-Nhắc lịch / Thông báo
+Booking / Schedule / Payment / Notification
 ```
 
 ---
 
-## 4. Các Domain & Microservices
-
-Hệ thống được chia theo **bounded context**, mỗi domain tương ứng với **1 microservice**.
+## 6. Các Domain & Microservices
 
 ---
 
-### 4.1. AUTH SERVICE – Xác thực & phân quyền
+### 6.1. USER DOMAIN – User Service
 
-**Mục đích**
-Quản lý danh tính và quyền truy cập của người dùng.
+#### Mục đích
 
-**Business responsibilities**
+Quản lý **thông tin hồ sơ người dùng**, KHÔNG quản lý xác thực.
 
-* Đăng ký tài khoản
-* Đăng nhập / đăng xuất
-* Phát hành JWT token
-* Phân quyền:
+#### Business responsibilities
 
-    * `CUSTOMER`
-    * `STAFF`
-    * `ADMIN`
+* Lưu profile:
 
-**Không làm**
+  * Họ tên
+  * Email
+  * Số điện thoại
+* Lưu vai trò nghiệp vụ (Customer / Staff / Admin)
+* Map 1–1 với user trong Keycloak
 
-* Không lưu profile chi tiết (để User Service làm)
-* Không chứa nghiệp vụ booking
+#### Business rules
 
----
-
-### 4.2. USER SERVICE – Hồ sơ người dùng
-
-**Mục đích**
-Quản lý thông tin cá nhân của người dùng.
-
-**Business responsibilities**
-
-* Lưu profile khách hàng:
-
-    * Họ tên
-    * Số điện thoại
-    * Email
-* (Mở rộng) Hồ sơ nhân viên spa:
-
-    * Chuyên môn
-    * Chi nhánh
-    * Trạng thái làm việc
-
-**Quan hệ**
-
-* 1 User → nhiều Booking
-* User **không** sở hữu Slot
+* `user_id` = Keycloak `sub`
+* Không lưu password
+* Không lưu refresh token
 
 ---
 
-### 4.3. CATALOG SERVICE – Dịch vụ spa
+### 6.2. CATALOG DOMAIN – Catalog Service
 
-**Mục đích**
-Quản lý các dịch vụ spa mà khách hàng có thể đặt.
+#### Mục đích
 
-**Business responsibilities**
+Quản lý **dịch vụ spa** mà khách có thể đặt.
 
-* CRUD dịch vụ spa:
+#### Business responsibilities
 
-    * Tên dịch vụ
-    * Thời lượng (phút)
-    * Giá tiền
-* Gắn tag / category (massage, facial, nail…)
+* CRUD dịch vụ spa
+* Quản lý:
 
-**Business rules**
+  * Tên dịch vụ
+  * Thời lượng
+  * Giá tiền
+* Gắn category
 
-* Dịch vụ **không phụ thuộc slot**
-* Giá dịch vụ có thể thay đổi theo thời gian
-* Booking phải lưu **price snapshot**, không phụ thuộc giá hiện tại
+#### Business rules
 
----
-
-### 4.4. SCHEDULE SERVICE – Lịch làm việc & Slot
-
-> Đây là **core domain** quan trọng nhất của hệ thống.
-
-#### 4.4.1. Khái niệm Slot (rất quan trọng)
-
-**Slot = một khung giờ cụ thể có thể được đặt**
-
-Ví dụ:
-
-| Thuộc tính | Giá trị     |
-| ---------- | ----------- |
-| staffId    | NV01        |
-| date       | 2025-01-10  |
-| time       | 10:00–11:00 |
-| status     | AVAILABLE   |
-
-**Slot tồn tại độc lập với Booking**
+* Giá có thể thay đổi theo thời gian
+* Booking **luôn lưu snapshot giá**
 
 ---
 
-#### 4.4.2. Business responsibilities
+### 6.3. SCHEDULE DOMAIN – Schedule Service (CORE DOMAIN)
+
+#### 6.3.1. Khái niệm Slot
+
+> **Slot = một khung giờ cụ thể có thể được đặt**
+
+| Thuộc tính | Ý nghĩa                   |
+| ---------- | ------------------------- |
+| staffId    | Nhân viên                 |
+| date       | Ngày                      |
+| timeRange  | Giờ bắt đầu – kết thúc    |
+| status     | AVAILABLE / HELD / BOOKED |
+
+Slot:
+
+* Tồn tại **độc lập**
+* Có thể tái sử dụng
+
+---
+
+#### 6.3.2. Business responsibilities
 
 * Quản lý lịch làm việc nhân viên
-* Tạo slot trống theo:
-
-    * ca làm việc
-    * thời lượng dịch vụ
-* Quản lý trạng thái slot:
-
-    * `AVAILABLE` – có thể đặt
-    * `HELD` – đang giữ tạm (booking pending)
-    * `BOOKED` – đã đặt
-* Release slot khi booking bị hủy / timeout
+* Sinh slot theo ca làm
+* Hold slot tạm thời
+* Confirm / Release slot
 
 ---
 
-#### 4.4.3. Business rules
+#### 6.3.3. Business rules
 
-* 1 Slot chỉ được:
-
-    * giữ bởi **tối đa 1 booking tại 1 thời điểm**
-* Slot **không thuộc booking**
-* Slot có thể:
-
-    * được đặt → hủy → tái sử dụng
+* 1 Slot chỉ có **1 hold active**
+* Slot HELD có TTL
+* Slot BOOKED khi booking CONFIRMED
 
 ---
 
-### 4.5. BOOKING SERVICE – Đặt lịch (Transaction)
+### 6.4. BOOKING DOMAIN – Booking Service (TRANSACTION)
 
-> Booking là **hành động giao dịch**, không phải tài nguyên.
+#### 6.4.1. Khái niệm Booking
 
-#### 4.5.1. Khái niệm Booking
+> **Booking = giao dịch đặt một slot**
 
-**Booking = hành động khách hàng đặt 1 slot cụ thể**
-
-| Thuộc tính   | Ý nghĩa               |
-| ------------ | --------------------- |
-| bookingId    | ID giao dịch đặt lịch |
-| userId       | Khách hàng            |
-| slotId       | Slot được đặt         |
-| spaServiceId | Dịch vụ               |
-| status       | Trạng thái booking    |
+| Thuộc tính   | Ý nghĩa       |
+| ------------ | ------------- |
+| bookingId    | ID giao dịch  |
+| userId       | Khách hàng    |
+| slotId       | Slot được đặt |
+| spaServiceId | Dịch vụ       |
+| status       | Trạng thái    |
 
 ---
 
-#### 4.5.2. Trạng thái Booking
+#### 6.4.2. Trạng thái Booking
 
-| Status      | Ý nghĩa                    |
-| ----------- | -------------------------- |
-| `PENDING`   | Mới tạo, chưa thanh toán   |
-| `CONFIRMED` | Đã thanh toán, giữ slot    |
-| `CANCELLED` | Khách hủy                  |
-| `REJECTED`  | Payment fail / spa từ chối |
+| Status    | Ý nghĩa         |
+| --------- | --------------- |
+| PENDING   | Mới tạo         |
+| CONFIRMED | Đã thanh toán   |
+| CANCELLED | Khách hủy       |
+| REJECTED  | Thanh toán fail |
 
 ---
 
-#### 4.5.3. Business responsibilities
+#### 6.4.3. Business responsibilities
 
 * Tạo booking
-* Hủy booking
-* Query booking theo user
+* Huỷ booking
+* Query booking
 * Điều phối:
 
-    * giữ slot (Schedule Service)
-    * thanh toán (Payment Service)
+  * Schedule Service
+  * Payment Service
+  * Notification Service
 
 ---
 
-#### 4.5.4. Business rules quan trọng
+#### 6.4.4. Business rules quan trọng
 
-* **Không dùng `slotId` để hủy booking**
-* Mọi thao tác với booking đều dựa trên `bookingId`
-* Khi booking bị hủy:
-
-    * Slot phải được release
+* Không nhận `userId` từ request body
+* `userId` luôn lấy từ JWT (qua Gateway)
+* Mọi thao tác booking dùng `bookingId`
+* Huỷ booking → release slot
 
 ---
 
-### 4.6. PAYMENT SERVICE – Thanh toán
+### 6.5. PAYMENT DOMAIN – Payment Service
 
-**Mục đích**
+#### Mục đích
+
 Xử lý thanh toán cho booking.
 
-**Business responsibilities**
+#### Business responsibilities
 
 * Tạo payment transaction
-* Xác nhận thanh toán thành công / thất bại
-* Gửi event kết quả thanh toán
+* Xác nhận thành công / thất bại
+* Phát event kết quả
 
-**Business rules**
+#### Business rules
 
-* Booking **không được CONFIRMED nếu payment fail**
-* Payment là **event-driven**, không block booking lâu
-
----
-
-### 4.7. NOTIFICATION SERVICE – Thông báo
-
-**Mục đích**
-Giao tiếp với khách hàng.
-
-**Business responsibilities**
-
-* Gửi:
-
-    * Email xác nhận booking
-    * Nhắc lịch trước giờ spa
-    * Thông báo hủy / thay đổi
-* Subscribe các event:
-
-    * BookingCreated
-    * BookingConfirmed
-    * BookingCancelled
-
-**Không làm**
-
-* Không chứa nghiệp vụ booking
-* Không query DB của service khác
+* Booking chỉ CONFIRMED khi payment SUCCESS
+* Một booking chỉ có **1 payment SUCCESS**
 
 ---
 
-## 5. Quan hệ dữ liệu giữa các domain
+### 6.6. NOTIFICATION DOMAIN – Notification Service
+
+#### Mục đích
+
+Gửi thông báo cho người dùng.
+
+#### Business responsibilities
+
+* Email xác nhận booking
+* Nhắc lịch
+* Thông báo huỷ / thay đổi
+
+#### Business rules
+
+* Chỉ xử lý event
+* Không gọi DB service khác
+
+---
+
+## 7. Quan hệ dữ liệu giữa các domain (Logical)
 
 ```text
-User
- └── Booking
-       └── Slot
+User (Keycloak)
+  ↓ sub
+User Service
+  ↓ userId
+Booking
+  ↓ slotId
+Slot (Schedule)
 ```
 
-* Booking **tham chiếu** Slot (logical reference)
-* Không có foreign key DB giữa các service
-* Mỗi service **có database riêng**
+* Không join DB
+* Không FK cross-service
 
 ---
 
-## 6. Nguyên tắc kiến trúc (Architecture Principles)
+## 8. Nguyên tắc thiết kế dữ liệu
 
-1. **Database per service**
-2. **Loose coupling**
-3. **Event-driven cho side effects**
-4. **REST cho query / command đơn giản**
-5. **Không share entity**
-6. **ID chỉ có ý nghĩa trong domain sở hữu**
+1. Database per service
+2. ID toàn cục là UUID
+3. Logical reference, không foreign key cross DB
+4. Event-driven cho side effects
 
 ---
 
-## 7. Quy ước ID (rất quan trọng)
-
-| ID          | Thuộc domain     | Dùng để              |
-| ----------- | ---------------- | -------------------- |
-| `userId`    | User Service     | Định danh người dùng |
-| `slotId`    | Schedule Service | Định danh khung giờ  |
-| `bookingId` | Booking Service  | Định danh giao dịch  |
-| `paymentId` | Payment Service  | Định danh thanh toán |
-
----
-
-## 8. Luồng nghiệp vụ chuẩn (Happy Path)
+## 9. Luồng nghiệp vụ chuẩn (Happy Path)
 
 ### Booking thành công
 
 ```text
-Customer → Booking Service
-  → hold slot (Schedule)
-  → create payment (Payment)
-  → payment success
-  → confirm booking
-  → mark slot BOOKED
-  → notify customer
+Customer
+ → Login (Keycloak)
+ → Create Booking
+   → Hold Slot
+   → Payment SUCCESS
+   → Confirm Booking
+   → Confirm Slot
+   → Send Notification
 ```
 
 ---
 
-## 9. Các tình huống ngoại lệ (Edge Cases)
+## 10. Tình huống ngoại lệ (Edge Cases)
 
-* Thanh toán timeout
-* Slot bị giữ quá lâu → auto release
-* Khách hủy sát giờ → rule tính phí (mở rộng)
-* Nhân viên nghỉ đột xuất → reject booking
+* Slot hold timeout
+* Payment fail
+* Khách huỷ sát giờ
+* Nhân viên nghỉ đột xuất
+* Gateway từ chối JWT hết hạn
 
 ---
 
-## 10. Khả năng mở rộng trong tương lai
+## 11. Thay đổi so với kiến trúc cũ (Có Auth Service)
+
+| Nội dung      | Trước        | Sau       |
+| ------------- | ------------ | --------- |
+| Auth Service  | Có           | ❌         |
+| Auth DB       | Có           | ❌         |
+| Login API     | Backend      | Keycloak  |
+| JWT verify    | Auth Service | Gateway   |
+| UserId source | DB           | JWT `sub` |
+
+---
+
+## 12. Nguyên tắc vàng khi triển khai
+
+1. ❌ Không xử lý password trong hệ thống
+2. ❌ Không parse JWT trong service
+3. ✅ Gateway là điểm tin cậy duy nhất
+4. ✅ UserId = Keycloak `sub`
+5. ✅ Role từ token, không từ DB
+
+---
+
+## 13. Khả năng mở rộng trong tương lai
 
 * Multi-branch spa
-* Dynamic pricing
 * Loyalty / membership
 * Reschedule booking
-* Rating & feedback
-* AI gợi ý khung giờ tốt nhất
+* Dynamic pricing
+* AI recommendation
+* Multi-tenant (mỗi spa 1 realm)
 
 ---
 
-## 11. Kết luận
+## 14. Kết luận
 
-Hệ thống Booking Spa được thiết kế:
+Hệ thống Booking Spa:
 
-* Theo **business-first**
-* Phân chia domain rõ ràng
-* Phù hợp triển khai **microservices thực tế**
-* Dễ mở rộng, dễ scale, dễ bảo trì
+* Áp dụng **best practice bảo mật hiện đại**
+* Kiến trúc **microservices đúng nghĩa**
+* Dễ scale, dễ bảo trì
+* Giảm rủi ro bảo mật
+* Phù hợp production
 
 ---
 
-# 2️⃣ DOMAIN DIAGRAM & SEQUENCE DIAGRAM
+Nếu bạn muốn, bước tiếp theo mình có thể:
 
-## 2.1 Domain Diagram (Business View)
+* Xuất tài liệu này thành **Markdown + PDF hoàn chỉnh**
+* Vẽ lại **Domain Diagram & Sequence Diagram** theo Keycloak
+* Chuẩn hoá **OpenAPI contracts** (không còn userId trong body)
+* Viết **README chuẩn production** cho từng repo
+
+👉 Bạn muốn tiếp tục theo hướng nào?
+
+---
+
+# 📘 DOMAIN DIAGRAM + SEQUENCE DIAGRAM & STANDARD OPENAPI
+
+---
+
+Dưới đây là bộ deliverables “đúng Phương án C (Keycloak + Gateway JWT)” gồm:
+
+1. **Domain Diagram + Sequence Diagram** (cập nhật theo Keycloak)
+2. **OpenAPI chuẩn hóa** (không còn `userId` trong body; lấy từ JWT qua Gateway)
+3. **README production-ready cho từng repo** (template + nội dung đề xuất)
+
+---
+
+## 1) Domain Diagram theo Keycloak
 
 ```mermaid
 classDiagram
-    User "1" --> "*" Booking
-    Booking "*" --> "1" Slot
-    Booking "*" --> "1" SpaService
-    Booking "*" --> "1" Payment
+  class Keycloak {
+    +Realm: spa-booking
+    +Users/Passwords
+    +Roles: CUSTOMER|STAFF|ADMIN
+    +Issues JWT (sub, roles)
+  }
 
-    class User {
-      userId
-      name
-      phone
-      email
-    }
+  class APIGateway {
+    +Verify JWT (issuer, exp, signature)
+    +Route Policy (RBAC)
+    +Propagate User Context
+  }
 
-    class Slot {
-      slotId
-      staffId
-      date
-      timeRange
-      status
-    }
+  class UserServiceDB {
+    users(user_id=sub, full_name, email, phone, role_snapshot)
+    staff_profiles(staff_id=user_id, specialty, ...)
+  }
 
-    class SpaService {
-      spaServiceId
-      name
-      duration
-      price
-    }
+  class CatalogServiceDB {
+    spa_services(spa_service_id, name, duration, price, ...)
+    service_categories(...)
+  }
 
-    class Booking {
-      bookingId
-      userId
-      slotId
-      spaServiceId
-      status
-      totalPrice
-    }
+  class ScheduleServiceDB {
+    staff_schedules(schedule_id, staff_id, work_date, ...)
+    slots(slot_id, staff_id, work_date, start_time, end_time, status, booking_id?)
+    slot_holds(hold_id, slot_id, booking_id, expires_at, status)
+  }
 
-    class Payment {
-      paymentId
-      bookingId
-      status
-      amount
-    }
+  class BookingServiceDB {
+    bookings(booking_id, user_id=sub, slot_id, spa_service_id, status, total_price, ...)
+    booking_status_history(...)
+    booking_outbox(...)
+  }
+
+  class PaymentServiceDB {
+    payment_transactions(payment_id, booking_id, amount, status, ...)
+  }
+
+  class NotificationService {
+    +Consumes events
+    +Send Email/SMS
+    +Optional notification_logs
+  }
+
+  Keycloak --> APIGateway : JWT (Bearer)
+  APIGateway --> UserServiceDB : call APIs / propagate X-User-Id
+  APIGateway --> BookingServiceDB : route /bookings
+  APIGateway --> ScheduleServiceDB : route /slots
+  APIGateway --> CatalogServiceDB : route /services
+  APIGateway --> PaymentServiceDB : route /payments
+  BookingServiceDB --> ScheduleServiceDB : logical ref slotId (via API/event)
+  BookingServiceDB --> PaymentServiceDB : bookingId
+  BookingServiceDB --> NotificationService : events (outbox -> broker)
 ```
 
-👉 Ý nghĩa:
-
-* **Slot là resource**
-* **Booking là transaction**
-* Không có DB-level FK giữa services
+**Điểm khác biệt cốt lõi**: “Identity source of truth” là **Keycloak**; `user_id` nội bộ = `sub` từ token.
 
 ---
 
-## 2.2 Sequence Diagram – Booking Happy Path
+## 2) Sequence Diagram theo Keycloak (Happy path + Cancel)
+
+### 2.1 Booking thành công
 
 ```mermaid
 sequenceDiagram
-    participant C as Customer
-    participant B as Booking Service
-    participant S as Schedule Service
-    participant P as Payment Service
-    participant N as Notification Service
+  participant C as Client
+  participant K as Keycloak
+  participant G as API Gateway
+  participant B as Booking Service
+  participant S as Schedule Service
+  participant P as Payment Service
+  participant N as Notification Service
 
-    C->>B: Create Booking Request
-    B->>S: Hold Slot(slotId)
-    S-->>B: Slot HELD
-    B->>P: Create Payment
-    P-->>B: Payment SUCCESS
-    B->>S: Confirm Slot(slotId)
-    B->>N: Publish BookingConfirmedEvent
-    N-->>C: Send Confirmation Email
+  C->>K: OIDC Login (Authorization Code)
+  K-->>C: access_token (JWT) + refresh_token
+
+  C->>G: POST /bookings (Authorization: Bearer JWT)
+  G->>G: Verify JWT (iss/exp/signature) + RBAC
+  G->>B: Forward + X-User-Id=sub + X-User-Roles
+
+  B->>S: POST /slots/{slotId}/hold (bookingId, ttl)
+  S-->>B: HELD
+
+  B->>P: POST /payments (bookingId, amount)
+  P-->>B: SUCCESS
+
+  B->>S: POST /slots/{slotId}/confirm (bookingId)
+  S-->>B: BOOKED
+
+  B->>N: Publish BookingConfirmedEvent (outbox->broker)
+  N-->>C: Email/SMS confirmation (async)
+  B-->>G: 201 BookingResponse
+  G-->>C: 201 BookingResponse
+```
+
+### 2.2 Cancel booking
+
+```mermaid
+sequenceDiagram
+  participant C as Client
+  participant G as API Gateway
+  participant B as Booking Service
+  participant S as Schedule Service
+  participant N as Notification Service
+
+  C->>G: POST /bookings/{bookingId}/cancel (Bearer JWT)
+  G->>G: Verify JWT + RBAC
+  G->>B: Forward + X-User-Id=sub
+
+  B->>B: Verify booking.user_id == X-User-Id
+  B->>S: POST /slots/{slotId}/release (bookingId)
+  S-->>B: AVAILABLE
+
+  B->>N: Publish BookingCancelledEvent (outbox->broker)
+  B-->>G: 200 BookingResponse
+  G-->>C: 200 BookingResponse
 ```
 
 ---
 
-# 3️⃣ API CONTRACT – OPENAPI (THEO TỪNG SERVICE)
+## 3) OpenAPI Contracts chuẩn hóa (không còn userId trong body)
 
-Dưới đây là **contract ở mức business-API**, đủ dùng cho:
+### Quy ước chung
 
-* FE / Mobile
-* Integration test
-* Swagger / OpenAPI v3
+* Gateway xác thực JWT.
+* Services lấy user từ header do gateway propagate:
+
+  * `X-User-Id` (sub)
+  * `X-User-Roles`
+  * `X-User-Email` (optional)
+* **Không chấp nhận `userId` trong request body** (để tránh spoof).
+
+> Dưới đây là OpenAPI “service-level” (nội bộ, sau gateway). Bạn có thể thêm `securitySchemes` nếu muốn service tự verify token, nhưng theo phương án C thì **không bắt buộc**.
 
 ---
 
-## 3.1 Booking Service – OpenAPI (core)
+### 3.1 API Gateway (public entrypoint)
+
+```yaml
+openapi: 3.0.3
+info:
+  title: API Gateway (Public)
+  version: 1.0.0
+servers:
+  - url: https://api.example.com
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+security:
+  - bearerAuth: []
+
+paths:
+  /bookings:
+    $ref: './booking-service.yaml#/paths/~1bookings'
+  /slots/search:
+    $ref: './schedule-service.yaml#/paths/~1slots~1search'
+  /services:
+    $ref: './catalog-service.yaml#/paths/~1services'
+```
+
+---
+
+### 3.2 Booking Service
 
 ```yaml
 openapi: 3.0.3
@@ -457,134 +587,143 @@ info:
   title: Booking Service API
   version: 1.0.0
 
-paths:
-  /bookings:
-    post:
-      summary: Create a new booking
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CreateBookingRequest'
-      responses:
-        '201':
-          description: Booking created
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/BookingResponse'
-
-    get:
-      summary: Get bookings by user
-      parameters:
-        - in: query
-          name: userId
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '200':
-          description: List of bookings
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/BookingResponse'
-
-  /bookings/{bookingId}:
-    get:
-      summary: Get booking detail
-      parameters:
-        - in: path
-          name: bookingId
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '200':
-          description: Booking detail
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/BookingResponse'
-
-  /bookings/cancel:
-    post:
-      summary: Cancel a booking
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CancelBookingRequest'
-      responses:
-        '200':
-          description: Booking cancelled
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/BookingResponse'
-
 components:
+  parameters:
+    XUserId:
+      in: header
+      name: X-User-Id
+      required: true
+      schema: { type: string, format: uuid }
+    XUserRoles:
+      in: header
+      name: X-User-Roles
+      required: true
+      schema: { type: string }
+
   schemas:
     CreateBookingRequest:
       type: object
-      required: [userId, spaServiceId, slotId, totalPrice]
+      required: [spaServiceId, slotId, totalPrice, currency]
       properties:
-        userId:
-          type: string
-          format: uuid
-        spaServiceId:
-          type: string
-          format: uuid
-        slotId:
-          type: string
-          format: uuid
-        totalPrice:
-          type: number
-          format: decimal
-
-    CancelBookingRequest:
-      type: object
-      required: [bookingId, userId]
-      properties:
-        bookingId:
-          type: string
-          format: uuid
-        userId:
-          type: string
-          format: uuid
+        spaServiceId: { type: string, format: uuid }
+        slotId: { type: string, format: uuid }
+        totalPrice: { type: number, format: double }
+        currency: { type: string, minLength: 3, maxLength: 3 }
+        note: { type: string }
 
     BookingResponse:
       type: object
       properties:
-        bookingId:
-          type: string
-          format: uuid
-        userId:
-          type: string
-          format: uuid
-        slotId:
-          type: string
-          format: uuid
-        spaServiceId:
-          type: string
-          format: uuid
-        status:
-          type: string
-        totalPrice:
-          type: number
+        bookingId: { type: string, format: uuid }
+        userId: { type: string, format: uuid }   # derived from X-User-Id
+        spaServiceId: { type: string, format: uuid }
+        slotId: { type: string, format: uuid }
+        status: { type: string, enum: [PENDING, CONFIRMED, CANCELLED, REJECTED] }
+        totalPrice: { type: number, format: double }
+        currency: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+paths:
+  /bookings:
+    post:
+      summary: Create booking (user derived from token)
+      parameters: [ { $ref: '#/components/parameters/XUserId' }, { $ref: '#/components/parameters/XUserRoles' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateBookingRequest' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BookingResponse' }
+
+    get:
+      summary: List my bookings
+      parameters: [ { $ref: '#/components/parameters/XUserId' } ]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/BookingResponse' }
+
+  /bookings/{bookingId}:
+    get:
+      summary: Get my booking detail
+      parameters:
+        - { $ref: '#/components/parameters/XUserId' }
+        - in: path
+          name: bookingId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+
+  /bookings/{bookingId}/cancel:
+    post:
+      summary: Cancel my booking
+      parameters:
+        - { $ref: '#/components/parameters/XUserId' }
+        - in: path
+          name: bookingId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Cancelled
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BookingResponse' }
 ```
 
 ---
 
-## 3.2 Schedule Service – Slot API
+### 3.3 Schedule Service
 
 ```yaml
+openapi: 3.0.3
+info:
+  title: Schedule Service API
+  version: 1.0.0
+
+components:
+  parameters:
+    XUserId:
+      in: header
+      name: X-User-Id
+      required: true
+      schema: { type: string, format: uuid }
+    XUserRoles:
+      in: header
+      name: X-User-Roles
+      required: true
+      schema: { type: string }
+
+  schemas:
+    SlotResponse:
+      type: object
+      properties:
+        slotId: { type: string, format: uuid }
+        staffId: { type: string, format: uuid }
+        workDate: { type: string, format: date }
+        startTime: { type: string, example: "10:00:00" }
+        endTime: { type: string, example: "11:00:00" }
+        status: { type: string, enum: [AVAILABLE, HELD, BOOKED] }
+
+    HoldSlotRequest:
+      type: object
+      required: [bookingId, ttlSeconds]
+      properties:
+        bookingId: { type: string, format: uuid }
+        ttlSeconds: { type: integer, minimum: 30, maximum: 1800 }
+
 paths:
   /slots/search:
     get:
@@ -592,104 +731,488 @@ paths:
       parameters:
         - in: query
           name: date
-          schema:
-            type: string
-            format: date
+          required: true
+          schema: { type: string, format: date }
+        - in: query
+          name: spaServiceId
+          required: false
+          schema: { type: string, format: uuid }
       responses:
         '200':
-          description: Available slots
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/SlotResponse' }
 
-  /slots/hold:
+  /slots/{slotId}/hold:
     post:
-      summary: Hold a slot temporarily
+      summary: Hold slot (internal use by booking-service)
+      parameters: [ { $ref: '#/components/parameters/XUserRoles' } ]
       requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/HoldSlotRequest' }
+      responses:
+        '200': { description: HELD }
+
+  /slots/{slotId}/confirm:
+    post:
+      summary: Confirm slot (after payment success)
+      parameters: [ { $ref: '#/components/parameters/XUserRoles' } ]
+      requestBody:
+        required: true
         content:
           application/json:
             schema:
               type: object
+              required: [bookingId]
               properties:
-                slotId:
-                  type: string
-                  format: uuid
+                bookingId: { type: string, format: uuid }
+      responses:
+        '200': { description: BOOKED }
 
-  /slots/confirm:
+  /slots/{slotId}/release:
     post:
-      summary: Confirm slot after payment
-
-  /slots/release:
-    post:
-      summary: Release slot after cancel/timeout
+      summary: Release slot (cancel/timeout)
+      parameters: [ { $ref: '#/components/parameters/XUserRoles' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [bookingId]
+              properties:
+                bookingId: { type: string, format: uuid }
+      responses:
+        '200': { description: AVAILABLE }
 ```
 
 ---
 
-## 3.3 Catalog Service – Spa Services
+### 3.4 User Service (profile, map Keycloak sub)
 
 ```yaml
+openapi: 3.0.3
+info:
+  title: User Service API
+  version: 1.0.0
+
+components:
+  parameters:
+    XUserId:
+      in: header
+      name: X-User-Id
+      required: true
+      schema: { type: string, format: uuid }
+    XUserEmail:
+      in: header
+      name: X-User-Email
+      required: false
+      schema: { type: string }
+
+  schemas:
+    MyProfileResponse:
+      type: object
+      properties:
+        userId: { type: string, format: uuid }
+        fullName: { type: string }
+        email: { type: string }
+        phone: { type: string }
+        role: { type: string }
+
+    UpdateMyProfileRequest:
+      type: object
+      properties:
+        fullName: { type: string }
+        phone: { type: string }
+
+paths:
+  /me:
+    get:
+      summary: Get my profile (userId from token)
+      parameters: [ { $ref: '#/components/parameters/XUserId' } ]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MyProfileResponse' }
+
+    put:
+      summary: Update my profile
+      parameters: [ { $ref: '#/components/parameters/XUserId' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateMyProfileRequest' }
+      responses:
+        '200':
+          description: OK
+```
+
+---
+
+### 3.5 Catalog Service (public read, admin write)
+
+```yaml
+openapi: 3.0.3
+info:
+  title: Catalog Service API
+  version: 1.0.0
+
+components:
+  parameters:
+    XUserRoles:
+      in: header
+      name: X-User-Roles
+      required: false
+      schema: { type: string }
+
 paths:
   /services:
     get:
-      summary: List spa services
-    post:
-      summary: Create spa service
+      summary: List spa services (public)
+      responses:
+        '200': { description: OK }
 
-  /services/{id}:
-    get:
-      summary: Get spa service detail
+  /admin/services:
+    post:
+      summary: Create spa service (ADMIN only - enforced at gateway)
+      parameters: [ { $ref: '#/components/parameters/XUserRoles' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, durationMinutes, price, currency]
+              properties:
+                name: { type: string }
+                durationMinutes: { type: integer, minimum: 1 }
+                price: { type: number, format: double }
+                currency: { type: string, minLength: 3, maxLength: 3 }
+      responses:
+        '201': { description: Created }
 ```
 
 ---
 
-## 3.4 Payment Service
+### 3.6 Payment Service (booking creates payment; userId derived for audit)
 
 ```yaml
+openapi: 3.0.3
+info:
+  title: Payment Service API
+  version: 1.0.0
+
+components:
+  parameters:
+    XUserId:
+      in: header
+      name: X-User-Id
+      required: true
+      schema: { type: string, format: uuid }
+
 paths:
   /payments:
     post:
       summary: Create payment for booking
+      parameters: [ { $ref: '#/components/parameters/XUserId' } ]
       requestBody:
+        required: true
         content:
           application/json:
             schema:
               type: object
+              required: [bookingId, amount, currency]
               properties:
-                bookingId:
-                  type: string
-                  format: uuid
-                amount:
-                  type: number
+                bookingId: { type: string, format: uuid }
+                amount: { type: number, format: double }
+                currency: { type: string, minLength: 3, maxLength: 3 }
+      responses:
+        '200': { description: INIT/SUCCESS/FAILED }
 ```
 
 ---
 
-## 3.5 Notification Service (Event-driven)
+## 4) README production-ready cho từng repo (template + đề xuất cụ thể)
 
-```text
-Subscribes:
+Mình đưa **template chuẩn** + “điền sẵn” điểm khác nhau cho từng repo. Bạn copy vào `README.md` mỗi repo là dùng được.
+
+### 4.1 Template chung (áp dụng cho mọi service repo)
+
+````md
+# <service-name>
+
+## Overview
+Short description: responsibility, bounded context, key endpoints/events.
+
+## Tech Stack
+- Java 21
+- Spring Boot 3.x
+- (Gateway: Spring Cloud Gateway / WebFlux)
+- PostgreSQL
+- Kafka/RabbitMQ (if applicable)
+- Observability: Actuator, Micrometer, OpenTelemetry (optional)
+
+## Architecture
+- Microservice
+- Database per service
+- Auth: Keycloak (OIDC) + JWT validated at API Gateway
+- User context headers from gateway:
+  - X-User-Id
+  - X-User-Roles
+  - X-User-Email (optional)
+
+## Local Development
+
+### Prerequisites
+- JDK 21
+- Maven 3.9+
+- Docker + Docker Compose
+
+### Run (dev)
+```bash
+mvn clean spring-boot:run
+````
+
+### Configuration
+
+Key env vars / configs:
+
+* `SERVER_PORT`
+* `SPRING_DATASOURCE_URL`
+* `SPRING_DATASOURCE_USERNAME`
+* `SPRING_DATASOURCE_PASSWORD`
+
+### Database Migration
+
+* Flyway/Liquibase (recommended)
+* How to run migrations
+
+### API Docs
+
+* Swagger UI: `/swagger-ui.html` (if enabled)
+* OpenAPI spec: `/v3/api-docs`
+
+## Testing
+
+```bash
+mvn test
+```
+
+## Deployment
+
+* Docker build:
+
+```bash
+docker build -t <service-name>:local .
+```
+
+* K8s / Helm (if applicable)
+
+## Security Notes
+
+* Services do NOT handle password auth.
+* Do NOT accept `userId` from request body.
+* Trust `X-User-Id` from gateway only (block direct calls in production network policy).
+
+## Troubleshooting
+
+Common errors + fixes.
+
+````
+
+---
+
+### 4.2 `spa-api-gateway` README (điền sẵn)
+
+**Điểm riêng**: gateway verify JWT bằng Keycloak issuer-uri + enforce RBAC + propagate headers.
+
+```md
+# spa-api-gateway
+
+## Overview
+Public entrypoint. Validates JWT (Keycloak), enforces route RBAC, routes traffic to services, propagates user context headers.
+
+## Key Features
+- JWT validation via `issuer-uri` (JWKS auto-fetch)
+- Route policy:
+  - public routes: `/services`, `/slots/search`
+  - authenticated routes: `/bookings/**`, `/me`
+  - admin routes: `/admin/**`
+- Propagate headers:
+  - `X-User-Id = sub`
+  - `X-User-Roles = realm roles`
+  - `X-User-Email`
+
+## Config
+- `spring.security.oauth2.resourceserver.jwt.issuer-uri`
+- `spring.cloud.gateway.routes[*]`
+````
+
+---
+
+### 4.3 `spa-booking-service` README (điền sẵn)
+
+```md
+# spa-booking-service
+
+## Overview
+Booking transaction domain. Creates/cancels bookings, coordinates slot hold/confirm and payment, publishes booking events (outbox).
+
+## Contracts
+- `POST /bookings` (no userId in body)
+- `GET /bookings` (my bookings)
+- `POST /bookings/{bookingId}/cancel`
+
+## Data
+Tables:
+- `bookings`
+- `booking_status_history`
+- `booking_outbox`
+
+## Integration
+- Calls Schedule Service: hold/confirm/release slot
+- Calls Payment Service: create payment
+- Emits events: BookingCreated/Confirmed/Cancelled
+```
+
+---
+
+### 4.4 `spa-schedule-service` README (điền sẵn)
+
+```md
+# spa-schedule-service
+
+## Overview
+Slot resource domain. Manages staff schedules, generates slots, manages hold TTL, confirms/releases slots.
+
+## Contracts
+- `GET /slots/search`
+- `POST /slots/{slotId}/hold` (internal)
+- `POST /slots/{slotId}/confirm` (internal)
+- `POST /slots/{slotId}/release` (internal)
+
+## Data
+Tables:
+- `staff_schedules`
+- `slots`
+- `slot_holds`
+
+## Concurrency
+- Enforce single ACTIVE hold per slot
+- Use transaction + unique partial indexes
+```
+
+---
+
+### 4.5 `spa-user-service` README
+
+```md
+# spa-user-service
+
+## Overview
+User profile domain (no credential). Maps Keycloak `sub` to internal user profile.
+
+## Contracts
+- `GET /me`
+- `PUT /me`
+
+## Data
+Tables:
+- `users` (PK = Keycloak sub)
+- `staff_profiles` (optional)
+
+## Sync Strategy
+- Lazy create on first request:
+  - if user not exists -> create from token claims (sub/email)
+```
+
+---
+
+### 4.6 `spa-catalog-service` README
+
+```md
+# spa-catalog-service
+
+## Overview
+Spa services catalog domain. Public read endpoints and admin write endpoints.
+
+## Contracts
+- `GET /services` (public)
+- `POST /admin/services` (ADMIN via gateway)
+
+## Data
+- `spa_services`
+- `service_categories`
+```
+
+---
+
+### 4.7 `spa-payment-service` README
+
+```md
+# spa-payment-service
+
+## Overview
+Payment transaction domain. Creates payment attempts for bookingId and produces payment result.
+
+## Contracts
+- `POST /payments`
+
+## Data
+- `payment_transactions`
+
+## Idempotency
+- Enforce at most one SUCCESS per booking (unique partial index)
+```
+
+---
+
+### 4.8 `spa-notification-service` README
+
+```md
+# spa-notification-service
+
+## Overview
+Event-driven notifications. Consumes booking/payment events and sends email/SMS. Optional audit log table.
+
+## Inputs (Events)
 - BookingCreatedEvent
 - BookingConfirmedEvent
 - BookingCancelledEvent
+- PaymentStatusChangedEvent (optional)
 
-Actions:
-- Send Email
-- Send SMS (optional)
+## Data (optional)
+- `notification_logs`
 ```
 
 ---
 
-# ✅ TỔNG KẾT
+### 4.9 Repo `infra-keycloak` (khuyến nghị)
 
-Bạn hiện đã có:
+Bạn nên có 1 repo infra hoặc folder riêng (tùy multi-repo policy) để chứa:
 
-✔ Business document (Markdown + PDF)
-✔ Domain diagram & Sequence diagram
-✔ OpenAPI contract cho toàn bộ core services
-✔ Phù hợp **microservices thực chiến** + **multi-repo**
-✔ Có thể dùng cho:
-
-* Design review
-* Onboarding dev mới
-* Triển khai CI/CD
-* Làm base cho Swagger / Postman / FE
+* `docker-compose.yml` (Keycloak + Postgres + Gateway + services)
+* `realm-export.json` (export realm Keycloak)
+* `README` hướng dẫn setup realm/clients/roles
 
 ---
+
+## Nếu bạn muốn mình “đóng gói” hơn
+
+Mình có thể xuất toàn bộ:
+
+* `openapi/*.yaml` tách file theo service
+* `README.md` cho từng repo thành bộ file
+* `diagrams/*.md` chứa Mermaid (domain + sequence)
+
+Chỉ cần bạn confirm danh sách repo cuối cùng bạn chốt (có `config-service`/`discovery-service` nữa hay không, và dùng Kafka hay chưa).
+
+
