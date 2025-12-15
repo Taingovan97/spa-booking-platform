@@ -1,0 +1,33 @@
+[submodule "spa-api-gateway"]
+	path = spa-api-gateway
+	url = https://github.com/Taingovan97/spa-api-gateway.git
+[submodule "spa-auth-service"]
+	path = spa-auth-service
+	url = https://github.com/Taingovan97/spa-auth-service.git
+[submodule "spa-booking-service"]
+	path = spa-booking-service
+	url = https://github.com/Taingovan97/spa-booking-service.git
+[submodule "spa-catalog-service"]
+	path = spa-catalog-service
+	url = https://github.com/Taingovan97/spa-catalog-service.git
+[submodule "spa-config-service"]
+	path = spa-config-service
+	url = https://github.com/Taingovan97/spa-config-service.git
+[submodule "spa-discovery-service"]
+	path = spa-discovery-service
+	url = https://github.com/Taingovan97/spa-discovery-service.git
+[submodule "spa-notification-service"]
+	path = spa-notification-service
+	url = https://github.com/Taingovan97/spa-notification-service.git
+[submodule "spa-payment-service"]
+	path = spa-payment-service
+	url = https://github.com/Taingovan97/spa-payment-service.git
+[submodule "spa-schedule-service"]
+	path = spa-schedule-service
+	url = https://github.com/Taingovan97/spa-schedule-service.git
+[submodule "spa-user-service"]
+	path = spa-user-service
+	url = https://github.com/Taingovan97/spa-user-service.git
+[submodule "spa-common-libs"]
+	path = spa-common-libs
+	url = https://github.com/Taingovan97/spa-common-libs.git
