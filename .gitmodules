@@ -31,3 +31,6 @@
 [submodule "spa-common-libs"]
 	path = spa-common-libs
 	url = https://github.com/Taingovan97/spa-common-libs.git
+[submodule "infra-keycloak"]
+	path = infra-keycloak
+	url = https://github.com/Taingovan97/infra-keycloak.git
