@@ -34,3 +34,6 @@
 [submodule "infra-keycloak"]
 	path = infra-keycloak
 	url = https://github.com/Taingovan97/infra-keycloak.git
+[submodule "spa-k8s"]
+	path = spa-k8s
+	url = https://github.com/Taingovan97/spa-k8s.git
